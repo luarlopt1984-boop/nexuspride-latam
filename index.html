@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexogay | Portal Digital</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Configuración de Firebase y Variables Globales
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+        // Inicializar Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // Estado de conexión
+        let isConnected = false;
+
+        // Verificar entorno Azure
+        function checkEnvironment() {
+            const hostname = window.location.hostname;
+            const azureBadge = document.getElementById('azure-badge');
+            
+            if (hostname.includes('azurestaticapps.net')) {
+                azureBadge.classList.remove('hidden');
+                console.log("Entorno Azure detectado: Verificado.");
+            }
+        }
+
+        // Autenticación Anónima (Requisito para escribir en la BD)
+        async function initSystem() {
+            checkEnvironment(); // Ejecutar verificación de entorno
+            try {
+                // Indicador de "Conectando..."
+                updateStatus('conectando');
+                
+                await signInAnonymously(auth);
+                
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        isConnected = true;
+                        console.log("Nexo conectado. ID:", user.uid);
+                        updateStatus('online');
+                    } else {
+                        isConnected = false;
+                        updateStatus('offline');
+                    }
+                });
+            } catch (error) {
+                console.error("Error al conectar con el Nexo:", error);
+                updateStatus('error');
+            }
+        }
+
+        // Función para actualizar la UI del estado
+        function updateStatus(status) {
+            const indicator = document.getElementById('system-status-dot');
+            const text = document.getElementById('system-status-text');
+            
+            if (status === 'online') {
+                indicator.className = "h-2.5 w-2.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]";
+                text.textContent = "SISTEMA ONLINE";
+                text.className = "text-xs font-bold text-green-500 tracking-wider";
+            } else if (status === 'conectando') {
+                indicator.className = "h-2.5 w-2.5 rounded-full bg-yellow-500 animate-pulse";
+                text.textContent = "CONECTANDO...";
+                text.className = "text-xs font-bold text-yellow-500 tracking-wider";
+            } else {
+                indicator.className = "h-2.5 w-2.5 rounded-full bg-red-500";
+                text.textContent = "OFFLINE";
+                text.className = "text-xs font-bold text-red-500 tracking-wider";
+            }
+        }
+
+        // Función de Suscripción (Newsletter)
+        window.handleSubscribe = async function(event) {
+            event.preventDefault();
+            const emailInput = document.getElementById('email-input');
+            const btn = document.getElementById('subscribe-btn');
+            const originalBtnText = btn.innerHTML;
+
+            if (!emailInput.value) return;
+
+            if (!isConnected) {
+                alert("Esperando conexión con el servidor...");
+                return;
+            }
+
+            try {
+                btn.disabled = true;
+                btn.innerHTML = `<i data-lucide="loader-2" class="animate-spin h-5 w-5"></i> Procesando...`;
+                lucide.createIcons();
+
+                // Guardar en Firestore (Ruta pública estricta)
+                // Colección: nexogay_subscribers
+                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'nexogay_subscribers'), {
+                    email: emailInput.value,
+                    timestamp: serverTimestamp(),
+                    source: 'landing_page',
+                    status: 'active'
+                });
+
+                // Éxito
+                btn.innerHTML = `<i data-lucide="check" class="h-5 w-5"></i> ¡Bienvenido!`;
+                btn.classList.remove('bg-violet-600', 'hover:bg-violet-700');
+                btn.classList.add('bg-green-600', 'hover:bg-green-700');
+                lucide.createIcons();
+                
+                emailInput.value = '';
+                
+                // Mostrar notificación visual
+                showNotification();
+
+                setTimeout(() => {
+                    btn.disabled = false;
+                    btn.innerHTML = originalBtnText;
+                    btn.classList.remove('bg-green-600', 'hover:bg-green-700');
+                    btn.classList.add('bg-violet-600', 'hover:bg-violet-700');
+                }, 3000);
+
+            } catch (error) {
+                console.error("Error al suscribir:", error);
+                alert("Hubo un error al conectar con la base de datos. Intenta de nuevo.");
+                btn.disabled = false;
+                btn.innerHTML = originalBtnText;
+            }
+        };
+
+        function showNotification() {
+            const notif = document.getElementById('success-notification');
+            notif.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => {
+                notif.classList.add('translate-y-20', 'opacity-0');
+            }, 4000);
+        }
+
+        // Iniciar el sistema al cargar
+        initSystem();
+    </script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        
+        .gradient-bg {
+            background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
+            background-size: 400% 400%;
+            animation: gradient 15s ease infinite;
+        }
+
+        @keyframes gradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        
+        /* Animación suave para blobs */
+        @keyframes blob {
+            0% { transform: translate(0px, 0px) scale(1); }
+            33% { transform: translate(30px, -50px) scale(1.1); }
+            66% { transform: translate(-20px, 20px) scale(0.9); }
+            100% { transform: translate(0px, 0px) scale(1); }
+        }
+        .animate-blob {
+            animation: blob 7s infinite;
+        }
+        .animation-delay-2000 {
+            animation-delay: 2s;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+    <!-- Navbar -->
+    <nav class="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-slate-200 transition-all duration-300">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center gap-2">
+                    <div class="bg-gradient-to-br from-pink-500 to-violet-600 text-white p-2 rounded-lg shadow-lg shadow-violet-200">
+                        <i data-lucide="network" class="h-6 w-6"></i>
+                    </div>
+                    <div class="flex flex-col">
+                        <div class="flex items-center gap-2">
+                            <span class="font-bold text-xl tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-pink-600 to-violet-600 leading-none">
+                                NEXOGAY
+                            </span>
+                            <!-- Azure Badge (Hidden by default) -->
+                            <span id="azure-badge" class="hidden px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 text-[9px] font-bold border border-blue-200 tracking-wide">
+                                AZURE CLOUD
+                            </span>
+                        </div>
+                        <!-- Status Indicator -->
+                        <div class="flex items-center gap-1.5 mt-1">
+                            <div id="system-status-dot" class="h-2 w-2 rounded-full bg-slate-300"></div>
+                            <span id="system-status-text" class="text-[10px] font-bold text-slate-400 tracking-wider">OFFLINE</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="hidden md:flex space-x-8">
+                    <a href="#inicio" class="text-slate-600 hover:text-violet-600 transition-colors font-medium text-sm uppercase tracking-wide">Inicio</a>
+                    <a href="#comunidad" class="text-slate-600 hover:text-violet-600 transition-colors font-medium text-sm uppercase tracking-wide">Comunidad</a>
+                    <a href="#eventos" class="text-slate-600 hover:text-violet-600 transition-colors font-medium text-sm uppercase tracking-wide">Eventos</a>
+                </div>
+
+                <div class="flex items-center gap-4">
+                    <button class="bg-slate-900 text-white px-5 py-2 rounded-full text-sm font-medium hover:bg-slate-800 transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 transform duration-200 flex items-center gap-2">
+                        <i data-lucide="user" class="h-4 w-4"></i>
+                        Acceso Miembros
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <header id="inicio" class="relative overflow-hidden min-h-[85vh] flex items-center justify-center">
+        <div class="absolute inset-0 gradient-bg opacity-10"></div>
+        
+        <!-- Decorative blobs -->
+        <div class="absolute top-1/4 left-1/4 w-72 h-72 bg-purple-400 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob"></div>
+        <div class="absolute top-1/3 right-1/4 w-72 h-72 bg-pink-400 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-2000"></div>
+        <div class="absolute -bottom-8 left-1/2 w-72 h-72 bg-blue-400 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-4000"></div>
+
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 w-full">
+            <div class="text-center max-w-4xl mx-auto">
+                <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/50 backdrop-blur-sm border border-violet-100 text-violet-700 text-sm font-semibold mb-8 shadow-sm">
+                    <span class="relative flex h-2.5 w-2.5">
+                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75"></span>
+                      <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-violet-500"></span>
+                    </span>
+                    Conectando identidades en tiempo real
+                </div>
+                
+                <h1 class="text-5xl md:text-7xl font-black tracking-tight text-slate-900 mb-8 leading-tight">
+                    El punto de encuentro <br>
+                    <span class="bg-clip-text text-transparent bg-gradient-to-r from-pink-500 via-violet-500 to-indigo-500">
+                        Global & Diverso
+                    </span>
+                </h1>
+                
+                <p class="text-xl md:text-2xl text-slate-600 mb-12 leading-relaxed font-light max-w-2xl mx-auto">
+                    Un ecosistema digital donde la cultura, los negocios y el estilo de vida convergen. Tu identidad es la llave.
+                </p>
+                
+                <div class="flex flex-col sm:flex-row gap-4 justify-center items-center">
+                    <button onclick="scrollToSection('comunidad')" class="w-full sm:w-auto px-8 py-4 bg-slate-900 text-white rounded-2xl font-bold hover:bg-slate-800 transition-all shadow-xl hover:shadow-2xl hover:-translate-y-1 flex items-center justify-center gap-2 group">
+                        Explorar el Nexo
+                        <i data-lucide="arrow-right" class="h-5 w-5 group-hover:translate-x-1 transition-transform"></i>
+                    </button>
+                    <button class="w-full sm:w-auto px-8 py-4 bg-white/80 backdrop-blur-sm text-slate-700 border border-slate-200 rounded-2xl font-bold hover:bg-white transition-all flex items-center justify-center gap-2 hover:shadow-lg">
+                        <i data-lucide="play-circle" class="h-5 w-5 text-pink-500"></i>
+                        Ver Manifiesto
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Features Grid -->
+    <section id="comunidad" class="py-32 bg-white relative">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-20">
+                <h2 class="text-3xl font-bold text-slate-900">Ecosistema Integrado</h2>
+                <div class="h-1 w-20 bg-gradient-to-r from-pink-500 to-violet-500 mx-auto mt-4 rounded-full"></div>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <!-- Card 1 -->
+                <div class="group p-8 rounded-3xl bg-slate-50 hover:bg-white border border-slate-100 hover:border-violet-100 transition-all hover:shadow-[0_20px_40px_-15px_rgba(124,58,237,0.1)] relative overflow-hidden">
+                    <div class="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
+                        <i data-lucide="users" class="h-32 w-32 text-pink-600"></i>
+                    </div>
+                    <div class="h-14 w-14 bg-pink-100 text-pink-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-sm">
+                        <i data-lucide="users" class="h-7 w-7"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-slate-900 mb-3">Networking & Alianzas</h3>
+                    <p class="text-slate-600 leading-relaxed">
+                        Conecta con profesionales, creativos y emprendedores. Un espacio seguro para crecer tu red de contactos bajo una visión inclusiva.
+                    </p>
+                </div>
+
+                <!-- Card 2 -->
+                <div class="group p-8 rounded-3xl bg-slate-50 hover:bg-white border border-slate-100 hover:border-violet-100 transition-all hover:shadow-[0_20px_40px_-15px_rgba(124,58,237,0.1)] relative overflow-hidden">
+                    <div class="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
+                        <i data-lucide="calendar" class="h-32 w-32 text-violet-600"></i>
+                    </div>
+                    <div class="h-14 w-14 bg-violet-100 text-violet-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-sm">
+                        <i data-lucide="calendar" class="h-7 w-7"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-slate-900 mb-3">Agenda Cultural</h3>
+                    <p class="text-slate-600 leading-relaxed">
+                        Descubre eventos, exposiciones y fiestas exclusivas. La curaduría más completa de actividades en tu ciudad.
+                    </p>
+                </div>
+
+                <!-- Card 3 -->
+                <div class="group p-8 rounded-3xl bg-slate-50 hover:bg-white border border-slate-100 hover:border-violet-100 transition-all hover:shadow-[0_20px_40px_-15px_rgba(124,58,237,0.1)] relative overflow-hidden">
+                    <div class="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
+                        <i data-lucide="heart-handshake" class="h-32 w-32 text-indigo-600"></i>
+                    </div>
+                    <div class="h-14 w-14 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-sm">
+                        <i data-lucide="heart-handshake" class="h-7 w-7"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-slate-900 mb-3">Bienestar & Apoyo</h3>
+                    <p class="text-slate-600 leading-relaxed">
+                        Recursos de salud mental, física y legal. Porque una comunidad fuerte se construye cuidándonos mutuamente.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Stats Section -->
+    <section class="py-24 bg-slate-900 text-white relative overflow-hidden">
+        <div class="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
+        <div class="absolute inset-0 bg-gradient-to-b from-slate-900 via-transparent to-slate-900"></div>
+        
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-12 text-center">
+                <div class="p-4">
+                    <div class="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-400 mb-3">15k+</div>
+                    <div class="text-slate-400 text-xs font-bold uppercase tracking-widest">Miembros Activos</div>
+                </div>
+                <div class="p-4">
+                    <div class="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-indigo-400 mb-3">50+</div>
+                    <div class="text-slate-400 text-xs font-bold uppercase tracking-widest">Ciudades</div>
+                </div>
+                <div class="p-4">
+                    <div class="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-blue-400 mb-3">120</div>
+                    <div class="text-slate-400 text-xs font-bold uppercase tracking-widest">Eventos Anuales</div>
+                </div>
+                <div class="p-4">
+                    <div class="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-teal-400 mb-3">24/7</div>
+                    <div class="text-slate-400 text-xs font-bold uppercase tracking-widest">Soporte</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Newsletter / Call to Action -->
+    <section class="py-32 bg-white relative">
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
+            <div class="bg-gradient-to-br from-slate-50 to-white p-10 rounded-3xl shadow-2xl border border-slate-100">
+                <h2 class="text-3xl font-bold text-slate-900 mb-4">Únete al Nexo</h2>
+                <p class="text-slate-600 mb-8 max-w-xl mx-auto">
+                    Recibe actualizaciones exclusivas y conviértete en parte de nuestra base de datos central.
+                </p>
+                <form onsubmit="handleSubscribe(event)" class="flex flex-col sm:flex-row gap-4 max-w-md mx-auto relative">
+                    <input id="email-input" type="email" placeholder="tu@correo.com" class="flex-1 px-6 py-4 rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all shadow-inner" required>
+                    <button id="subscribe-btn" type="submit" class="px-8 py-4 bg-violet-600 text-white font-bold rounded-xl hover:bg-violet-700 transition-all shadow-lg shadow-violet-200 flex items-center justify-center gap-2 min-w-[160px]">
+                        Suscribirse
+                    </button>
+                </form>
+                <p class="text-xs text-slate-400 mt-6 flex items-center justify-center gap-1">
+                    <i data-lucide="lock" class="h-3 w-3"></i> Tus datos están protegidos en nuestra nube segura.
+                </p>
+            </div>
+        </div>
+        
+        <!-- Background decoration -->
+        <div class="absolute bottom-0 left-0 w-full h-1/2 bg-slate-50/50 skew-y-3 origin-bottom-right -z-0"></div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-slate-50 border-t border-slate-200 pt-20 pb-10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-12 mb-16">
+                <div class="col-span-1 md:col-span-1">
+                    <div class="flex items-center gap-2 mb-6">
+                        <div class="bg-slate-900 text-white p-1.5 rounded-lg">
+                            <i data-lucide="network" class="h-5 w-5"></i>
+                        </div>
+                        <span class="font-bold text-lg text-slate-900">NEXOGAY</span>
+                    </div>
+                    <p class="text-slate-500 text-sm leading-relaxed mb-6">
+                        Construyendo puentes, derribando barreras. La plataforma líder para la conexión y el desarrollo de nuestra comunidad.
+                    </p>
+                </div>
+                
+                <div>
+                    <h4 class="font-bold text-slate-900 mb-6 text-sm uppercase tracking-wider">Plataforma</h4>
+                    <ul class="space-y-3 text-sm text-slate-600">
+                        <li><a href="#" class="hover:text-violet-600 transition-colors flex items-center gap-2"><span class="w-1 h-1 bg-slate-300 rounded-full"></span>Sobre Nosotros</a></li>
+                        <li><a href="#" class="hover:text-violet-600 transition-colors flex items-center gap-2"><span class="w-1 h-1 bg-slate-300 rounded-full"></span>Membresías</a></li>
+                        <li><a href="#" class="hover:text-violet-600 transition-colors flex items-center gap-2"><span class="w-1 h-1 bg-slate-300 rounded-full"></span>Bolsa de Trabajo</a></li>
+                    </ul>
+                </div>
+
+                <div>
+                    <h4 class="font-bold text-slate-900 mb-6 text-sm uppercase tracking-wider">Recursos</h4>
+                    <ul class="space-y-3 text-sm text-slate-600">
+                        <li><a href="#" class="hover:text-violet-600 transition-colors flex items-center gap-2"><span class="w-1 h-1 bg-slate-300 rounded-full"></span>Blog</a></li>
+                        <li><a href="#" class="hover:text-violet-600 transition-colors flex items-center gap-2"><span class="w-1 h-1 bg-slate-300 rounded-full"></span>Guías de Seguridad</a></li>
+                        <li><a href="#" class="hover:text-violet-600 transition-colors flex items-center gap-2"><span class="w-1 h-1 bg-slate-300 rounded-full"></span>Directorio de Aliados</a></li>
+                    </ul>
+                </div>
+
+                <div>
+                    <h4 class="font-bold text-slate-900 mb-6 text-sm uppercase tracking-wider">Síguenos</h4>
+                    <div class="flex gap-4">
+                        <a href="#" class="h-10 w-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-400 hover:text-pink-500 hover:border-pink-200 hover:shadow-md transition-all group">
+                            <i data-lucide="instagram" class="h-5 w-5 group-hover:scale-110 transition-transform"></i>
+                        </a>
+                        <a href="#" class="h-10 w-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-400 hover:text-blue-500 hover:border-blue-200 hover:shadow-md transition-all group">
+                            <i data-lucide="twitter" class="h-5 w-5 group-hover:scale-110 transition-transform"></i>
+                        </a>
+                        <a href="#" class="h-10 w-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-400 hover:text-indigo-500 hover:border-indigo-200 hover:shadow-md transition-all group">
+                            <i data-lucide="linkedin" class="h-5 w-5 group-hover:scale-110 transition-transform"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="border-t border-slate-200 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
+                <p class="text-slate-400 text-sm font-medium">© 2024 Nexogay. Todos los derechos reservados.</p>
+                <div class="flex gap-8 text-sm text-slate-500 font-medium">
+                    <a href="#" class="hover:text-slate-900 transition-colors">Privacidad</a>
+                    <a href="#" class="hover:text-slate-900 transition-colors">Términos</a>
+                    <a href="#" class="hover:text-slate-900 transition-colors">Cookies</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Notificación Flotante -->
+    <div id="success-notification" class="fixed bottom-8 right-8 z-50 transform transition-all duration-500 translate-y-20 opacity-0">
+        <div class="bg-slate-900 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-4">
+            <div class="h-10 w-10 bg-green-500 rounded-full flex items-center justify-center text-white">
+                <i data-lucide="check" class="h-6 w-6"></i>
+            </div>
+            <div>
+                <h4 class="font-bold text-sm">¡Registro Exitoso!</h4>
+                <p class="text-slate-400 text-xs">Tus datos han sido encriptados y guardados.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Inicializar iconos de Lucide
+        lucide.createIcons();
+
+        // Scroll suave
+        function scrollToSection(id) {
+            const element = document.getElementById(id);
+            if (element) {
+                element.scrollIntoView({ behavior: 'smooth' });
+            }
+        }
+    </script>
+</body>
+</html>
